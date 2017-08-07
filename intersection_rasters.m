@@ -40,6 +40,9 @@ function intersection_rasters(stimulus_coding, behavioral_readout, plot_marginal
 % 'signal_intensity': 'rho' parameter controlling stimulus discriminability
 % as defined in the SI.
 
+
+rng(2); % reset the random number generator
+
 if nargin < 3
     plot_marginals = false;
 end
@@ -58,6 +61,8 @@ thinned_npoints = npoints * fraction_npoints_joint;
 switch stimulus_coding
     case {'gaussian', 'gaussian_r1'}
         gaussian_covariance = [0.02, -0.005; -0.005, 0.02];
+    case {'gaussian_nocov'}
+        gaussian_covariance = [0.02, 0; 0, 0.02];
     case 'elongated_gaussian'
         s_plus = 0.18; % corresponds to sigma_+ in the paper
         s_minus = 0.07; % corresponds to sigma_- in the paper
@@ -102,6 +107,30 @@ end
     xdata1_left, xdata1_right, xdata2_left, xdata2_right,...
     ydata1_left, ydata1_right, ydata2_left, ydata2_right] = generate_data(thinned_npoints, stimulus_coding, behavioral_readout, signal_intensity, gaussian_covariance, hidden_feature_variance);
 
+% xdata1_left:  stim L, choice L (correct)
+% xdata2_left:  stim L, choice R (error)
+% xdata1_right: stim R, choice L (error)
+% xdata2_right: stim R, choice R (correct)
+
+
+n_trial_type = [length(xdata1_left),length(xdata1_right),length(xdata2_left),length(xdata2_right)];
+X_temp = [0 0;0 1;1 0;1 1];
+trial_type = [];
+for i = 1:4
+    trial_type = [trial_type;i*ones(n_trial_type(i),1)];
+end
+
+X = X_temp(trial_type,:);
+r1 = [xdata1_left, xdata1_right, xdata2_left, xdata2_right]';
+r2 = [ydata1_left, ydata1_right, ydata2_left, ydata2_right]';
+[beta1,dev1,stats1] = glmfit(X,r1,'normal');
+[beta2,dev2,stats2] = glmfit(X,r2,'normal');
+
+fprintf('GLM results:\n')
+fprintf('r1: beta0(offset) = %.2f (p=%.2f)\tbeta1(sensory) = %.2f (p=%.2f)\tbeta2(choice) = %.2f (p=%.2f)\n',beta1(1),stats1.p(1),beta1(2),stats1.p(2),beta1(3),stats1.p(3))
+fprintf('r2: beta0(offset) = %.2f (p=%.2f)\tbeta1(sensory) = %.2f (p=%.2f)\tbeta2(choice) = %.2f (p=%.2f)\n',beta2(1),stats2.p(1),beta2(2),stats2.p(2),beta2(3),stats2.p(3))
+
+
 
 % plot with green and blue for s=1,2, filled circles for correct and open
 % circles for wrong trials
@@ -128,7 +157,7 @@ h3 = plot(xdata2_left, ydata2_left,'o');
 set(h3,'MarkerEdgeColor',color_stim_2, 'MarkerFaceColor','none','markersize',ms,'LineWidth',linecircle)
 % plot stimulus boundary line
 switch stimulus_coding
-    case {'gaussian', 'elongated_gaussian', 'uniform_r1r2'}
+    case {'gaussian', 'elongated_gaussian', 'uniform_r1r2','gaussian_nocov'}
         plot((0:0.1:1),1-(0:0.1:1),'LineStyle','--','Color', color_stim_boundary,'linewidth',linewidth_plot);
     case {'gaussian_r1', 'uniform_r1'}
         plot([0.5, 0.5], [0, 1], 'LineStyle','--','Color', color_stim_boundary, 'linewidth',linewidth_plot);
@@ -173,7 +202,6 @@ manual_xlabels(3) = text(0.5, -0.1, 'r_1', 'FontSize', 16,'color', label_color_2
 
 
 set(manual_xlabels,'HorizontalAlignment','center')
-
 
 if plot_marginals
     % generate and plot marginal probabilities
@@ -520,7 +548,7 @@ function [xdata1, xdata2, ydata1, ydata2,...
             xdata2 = [F2x M2x];
             ydata2 = [F2y M2y];
             
-        case 'gaussian'
+        case {'gaussian','gaussian_nocov'}
             % this is a raster of stimulus being encoded by gaussian
             % distributions in rate and time, with noise correlations given
             % by gaussian_covariance
